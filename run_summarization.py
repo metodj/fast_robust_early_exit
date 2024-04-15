@@ -499,6 +499,8 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
             model.base_model.save_pretrained(training_args.output_dir)  # save config.json
 
     # Evaluation
+    print(type(trainer))
+    print(type(model))
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")

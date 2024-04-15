@@ -1,19 +1,19 @@
-CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node=4 \
-    run_summarization.py \
-    --model_name_or_path t5-large \
-    --do_train \
-    --do_eval \
-    --dataset_name cnn_dailymail \
-    --dataset_config_name "3.0.0" \
-    --output_dir ./save/cnndm_t5_large/ \
-    --per_device_train_batch_size 4 \
-    --per_device_eval_batch_size 16 \
-    --overwrite_output_dir \
-    --predict_with_generate \
-    --source_prefix "summarize: " \
-    --save_steps 5383 \
-    --learning_rate 1e-4 \
-    --num_train_epochs 3 \
+# CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node=4 \
+#     run_summarization.py \
+#     --model_name_or_path t5-large \
+#     --do_train \
+#     --do_eval \
+#     --dataset_name cnn_dailymail \
+#     --dataset_config_name "3.0.0" \
+#     --output_dir ./save/cnndm_t5_large/ \
+#     --per_device_train_batch_size 4 \
+#     --per_device_eval_batch_size 16 \
+#     --overwrite_output_dir \
+#     --predict_with_generate \
+#     --source_prefix "summarize: " \
+#     --save_steps 5383 \
+#     --learning_rate 1e-4 \
+#     --num_train_epochs 3 \
 
     # FREE
     # --output_hidden_states_decoder True \
@@ -38,17 +38,22 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python -m torch.distributed.run --nproc_per_node=4 
 
 CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.run --nproc_per_node=1 \
     run_summarization.py \
-    --model_name_or_path ./save/cnndm_t5_large/ \
+    --model_name_or_path ./save/cnndm_t5_large_weighted_ce/ \
     --do_eval \
     --dataset_name cnn_dailymail \
     --dataset_config_name "3.0.0" \
-    --output_dir ./save/cnndm_t5_large/ \
+    --output_dir ./save/cnndm_t5_large_weighted_ce/ \
     --per_device_eval_batch_size 1 \
     --deploy_scenario True \
     --use_synchronize True \
     --overwrite_output_dir \
     --predict_with_generate \
     --source_prefix "summarize: " \
+    --use_early_exit True \
+    --exit_conf_type softmax \
+    --exit_conf_threshold 0.5 \
+    --exit_min_layer 4 \
+    --max_eval_samples 200
 
     # FREE
     # --use_shallow_deep True \
