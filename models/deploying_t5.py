@@ -1265,7 +1265,6 @@ class DeployT5ForConditionalGeneration(T5ForConditionalGeneration):
         instead. For an overview of generation strategies and code examples, check the [following
         guide](../generation_strategies).
         """
-
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()

@@ -514,12 +514,17 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
     elif "squad" in data_args.dataset_name:
         metric = evaluate.load("squad_v2" if data_args.version_2_with_negative else "squad")
         
-        def compute_metrics(p: EvalPrediction, prefix: str = None):
+        def compute_metrics(p: EvalPrediction, prefix: str = None, compute_losses: bool = True):   
             metric_dict = metric.compute(predictions=p.predictions, references=p.label_ids)
             metric_keys = deepcopy(list(metric_dict.keys()))
             for key in metric_keys:
                 if prefix is not None and prefix not in key:
                     metric_dict['{}_{}'.format(prefix, key)] = metric_dict.pop(key)
+            if compute_losses:
+                losses = []
+                for i in range(len(p.predictions)):
+                    losses.append(metric.compute(predictions=[p.predictions[i]], references=[p.label_ids[i]])['f1'])
+                metric_dict['losses'] = str(losses)
             return metric_dict
         
     else:
@@ -645,7 +650,7 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
         trainer.push_to_hub(**kwargs)
         
     if not jupyter:
-        return results
+        return results, metrics
     else:
         return trainer
 
@@ -670,5 +675,19 @@ if __name__ == "__main__":
         model_cls = T5ForConditionalGeneration if not additional_args.deploy_scenario \
             else DeployT5ForConditionalGeneration
     trainer_cls = QATrainer
+
+    # main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+
+    res_dict = {}
+    for thres in np.arange(0.5, 1.02, 0.01):
+    # for thres in [0.5]:
+        additional_args.exit_conf_threshold = thres
+        _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+        res_dict[thres] = (res['eval_block_avg'], res['eval_f1'], res['losses'])
+        print(thres, res['eval_block_avg'], res['eval_f1'])
+   
     
-    main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+    # save as pickle file to outputdir
+    import pickle
+    with open(os.path.join(training_args.output_dir, f'res_dict_ncal{data_args.max_eval_samples}.pkl'), 'wb') as f:
+        pickle.dump(res_dict, f)
