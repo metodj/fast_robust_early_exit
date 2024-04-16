@@ -422,7 +422,11 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
         if data_args.max_eval_samples is not None:
             # We will select sample from whole data
             max_eval_samples = min(len(eval_examples), data_args.max_eval_samples)
-            eval_examples = eval_examples.select(range(max_eval_samples))
+            if additional_args.rcp_calib:  # RCP calibration
+                eval_examples = eval_examples.select(range(max_eval_samples))
+            else:  # RCP testing
+                eval_examples = eval_examples.select(range(max_eval_samples, len(eval_examples)))
+            samples_ids = [x["id"] for x in eval_examples]
         # Validation Feature Creation
         with training_args.main_process_first(desc="validation dataset map pre-processing"):
             eval_dataset = eval_examples.map(
@@ -436,7 +440,8 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
         if data_args.max_eval_samples is not None:
             # During Feature creation dataset samples might increase, we will select required samples again
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
-            eval_dataset = eval_dataset.select(range(max_eval_samples))
+            if additional_args.rcp_calib:  # RCP calibration
+                eval_dataset = eval_dataset.select(range(max_eval_samples))
 
     if training_args.do_predict:
         if "test" not in raw_datasets:
@@ -618,7 +623,9 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
         metrics = trainer.evaluate(max_length=max_length, num_beams=num_beams, metric_key_prefix="eval")
 
         max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
-        metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
+        # metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
+        metrics["eval_samples"] = len(eval_dataset)
+        metrics["samples_ids"] = str(samples_ids)
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
@@ -676,18 +683,69 @@ if __name__ == "__main__":
             else DeployT5ForConditionalGeneration
     trainer_cls = QATrainer
 
+    # =================== original code ===================
+
     # main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
 
+    # ====================================================
+
+    # =================== sanity check for the order of points in eval dataset ===================
+
+    # N_CAL = 100
+    # additional_args.rcp_calib = True
+    # data_args.max_eval_samples = N_CAL
+    # _, res1 = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+    # _, res2 = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+
+    # assert res1["samples_ids"] == res2["samples_ids"]
+
+    # ============================================================================================
+
+    # =================== RCP calibration ===================
+
+    # N_CAL = 500
+    # data_args.max_eval_samples = N_CAL
+    # additional_args.rcp_calib = True
+    # lambda_step =0.01
+
+    # res_dict = {}
+    # for thres in np.arange(0.5, 1.02, lambda_step):
+    #     additional_args.exit_conf_threshold = thres
+    #     _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+    #     res_dict[thres] = (res['eval_block_avg'], res['eval_f1'], res['losses'])
+    #     print(thres, res['eval_block_avg'], res['eval_f1'])
+   
+    
+    # with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}.pkl'), 'wb') as f:
+    #     pickle.dump(res_dict, f)
+
+    # ====================================================
+
+    # =================== RCP testing ===================
+
+
+    N_CAL = 500
+    data_args.max_eval_samples = N_CAL
+    additional_args.rcp_calib = False
+
+    # this is copied from LTT-EE-CV repo (branch: calm)
+    # RCP_LAMBDAS = [1.  , 0.99, 0.98, 0.98, 0.97, 0.95, 0.92, 0.86, 0.83, 0.81, 0.78, 0.75, 0.73, 0.71, 0.67, 0.63, 0.59, 0.56, 0.52, 0.5]
+    # LAMBDA_TYPE = 'ltt'
+
+    RCP_LAMBDAS = [1.  , 1.  , 0.98, 0.96, 0.89, 0.84, 0.83, 0.79, 0.78, 0.75, 0.74, 0.7 , 0.65, 0.63, 0.6 , 0.57, 0.53, 0.5] 
+    LAMBDA_TYPE = 'wsr'
+
+    
+
     res_dict = {}
-    for thres in np.arange(0.5, 1.02, 0.01):
-    # for thres in [0.5]:
+    for thres in RCP_LAMBDAS:
         additional_args.exit_conf_threshold = thres
         _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
         res_dict[thres] = (res['eval_block_avg'], res['eval_f1'], res['losses'])
         print(thres, res['eval_block_avg'], res['eval_f1'])
    
     
-    # save as pickle file to outputdir
-    import pickle
-    with open(os.path.join(training_args.output_dir, f'res_dict_ncal{data_args.max_eval_samples}.pkl'), 'wb') as f:
+    with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}_test_{LAMBDA_TYPE}.pkl'), 'wb') as f:
         pickle.dump(res_dict, f)
+
+    # ====================================================
