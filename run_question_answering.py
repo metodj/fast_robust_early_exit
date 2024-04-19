@@ -533,8 +533,6 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
                     metric_dict['{}_{}'.format(prefix, key)] = metric_dict.pop(key)
             if compute_losses:
                 losses = []
-                print('BANANA')
-                print(len(p.predictions), len(p.label_ids))
                 for i in range(len(p.predictions)):
                     losses.append(metric.compute(predictions=[p.predictions[i]], references=[p.label_ids[i]])['f1'])
                 metric_dict['losses'] = str(losses)

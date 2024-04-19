@@ -422,7 +422,7 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
 
         return preds, labels
 
-    def compute_metrics(eval_preds):
+    def compute_metrics(eval_preds, compute_losses: bool = True):
         preds, labels = eval_preds
         if isinstance(preds, tuple):
             preds = preds[0]
@@ -449,6 +449,12 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
         result = {k: round(v * 100, 4) for k, v in result.items()}
         prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds]
         result["gen_len"] = np.mean(prediction_lens)
+        if compute_losses:
+            losses = []
+            for i in range(len(decoded_preds)):
+                loss = metric.compute(predictions=[decoded_preds[i]], references=[decoded_labels[i]], use_stemmer=True)
+                losses.append(loss["rougeL"])
+            result["losses"] = str(losses)
         return result
 
     # Override the decoding parameters of Seq2SeqTrainer
@@ -552,7 +558,7 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
         trainer.create_model_card(**kwargs)
 
     if not jupyter:
-        return results
+        return results, metrics
     else:
         return trainer
 
@@ -584,4 +590,25 @@ if __name__ == "__main__":
 
     trainer_cls = SumTrainer
 
-    main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+    # main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+
+    # =================== RCP calibration ===================
+
+    N_CAL = 100
+    data_args.max_eval_samples = N_CAL
+    additional_args.rcp_calib_factor  = 0
+    additional_args.rcp_calib = True
+    lambda_step =0.01
+
+    res_dict = {}
+    for thres in np.arange(0.01, 1.01, lambda_step):
+        additional_args.exit_conf_threshold = thres
+        _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+        res_dict[thres] = (res['eval_block_avg'], res['eval_rougeL'], res['eval_losses'])
+        print(thres, res['eval_block_avg'], res['eval_rougeL'], len(eval(res['eval_losses'])))
+   
+    
+    with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}.pkl'), 'wb') as f:
+        pickle.dump(res_dict, f)
+
+    # ====================================================

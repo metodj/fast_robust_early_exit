@@ -36,7 +36,7 @@
     # --shallow_exit_layer 8 \ # for FREE
 
 
-CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.run --nproc_per_node=1 \
+CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.run --nproc_per_node=1 --master_port=29501 \
     run_summarization.py \
     --model_name_or_path ./save/cnndm_t5_large_weighted_ce/ \
     --do_eval \
@@ -51,9 +51,9 @@ CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.run --nproc_per_node=1 \
     --source_prefix "summarize: " \
     --use_early_exit True \
     --exit_conf_type softmax \
-    --exit_conf_threshold 0.5 \
+    --exit_conf_threshold 1.1 \
     --exit_min_layer 4 \
-    --max_eval_samples 200
+    --max_eval_samples 100
 
     # FREE
     # --use_shallow_deep True \
