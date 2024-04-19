@@ -60,6 +60,7 @@ from util import (
     AdditionalArguments,
     update_autoconfig,
 )
+import pickle
 
 logger = logging.getLogger(__name__)
 
@@ -421,11 +422,16 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
         eval_examples = raw_datasets["validation"]
         if data_args.max_eval_samples is not None:
             # We will select sample from whole data
+            
             max_eval_samples = min(len(eval_examples), data_args.max_eval_samples)
+            # TODO: implement this better
+            assert max_eval_samples == data_args.max_eval_samples
             if additional_args.rcp_calib:  # RCP calibration
-                eval_examples = eval_examples.select(range(max_eval_samples))
+                eval_examples = eval_examples.select(range(max_eval_samples * additional_args.rcp_calib_factor, max_eval_samples * (additional_args.rcp_calib_factor + 1)))
             else:  # RCP testing
-                eval_examples = eval_examples.select(range(max_eval_samples, len(eval_examples)))
+                assert additional_args.nr_test_samples is not None
+                upper_bound = min(len(eval_examples), additional_args.nr_test_samples + max_eval_samples) 
+                eval_examples = eval_examples.select(range(max_eval_samples, upper_bound))
             samples_ids = [x["id"] for x in eval_examples]
         # Validation Feature Creation
         with training_args.main_process_first(desc="validation dataset map pre-processing"):
@@ -527,6 +533,8 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
                     metric_dict['{}_{}'.format(prefix, key)] = metric_dict.pop(key)
             if compute_losses:
                 losses = []
+                print('BANANA')
+                print(len(p.predictions), len(p.label_ids))
                 for i in range(len(p.predictions)):
                     losses.append(metric.compute(predictions=[p.predictions[i]], references=[p.label_ids[i]])['f1'])
                 metric_dict['losses'] = str(losses)
@@ -703,8 +711,9 @@ if __name__ == "__main__":
 
     # =================== RCP calibration ===================
 
-    # N_CAL = 500
+    # N_CAL = 100
     # data_args.max_eval_samples = N_CAL
+    # additional_args.rcp_calib_factor  = 0
     # additional_args.rcp_calib = True
     # lambda_step =0.01
 
@@ -714,6 +723,7 @@ if __name__ == "__main__":
     #     _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
     #     res_dict[thres] = (res['eval_block_avg'], res['eval_f1'], res['losses'])
     #     print(thres, res['eval_block_avg'], res['eval_f1'])
+    #     break
    
     
     # with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}.pkl'), 'wb') as f:
@@ -724,28 +734,62 @@ if __name__ == "__main__":
     # =================== RCP testing ===================
 
 
-    N_CAL = 500
-    data_args.max_eval_samples = N_CAL
-    additional_args.rcp_calib = False
+    # N_CAL = 500
+    # N_TEST = 5000
+    # data_args.max_eval_samples = N_CAL
+    # additional_args.rcp_calib = False
+    # additional_args.nr_test_samples = N_TEST
 
-    # this is copied from LTT-EE-CV repo (branch: calm)
-    # RCP_LAMBDAS = [1.  , 0.99, 0.98, 0.98, 0.97, 0.95, 0.92, 0.86, 0.83, 0.81, 0.78, 0.75, 0.73, 0.71, 0.67, 0.63, 0.59, 0.56, 0.52, 0.5]
-    # LAMBDA_TYPE = 'ltt'
+    # # this is copied from LTT-EE-CV repo (branch: calm)
+    # # RCP_LAMBDAS = [1.  , 0.99, 0.98, 0.98, 0.97, 0.95, 0.92, 0.86, 0.83, 0.81, 0.78, 0.75, 0.73, 0.71, 0.67, 0.63, 0.59, 0.56, 0.52, 0.5]
+    # # LAMBDA_TYPE = 'ltt'
 
-    RCP_LAMBDAS = [1.  , 1.  , 0.98, 0.96, 0.89, 0.84, 0.83, 0.79, 0.78, 0.75, 0.74, 0.7 , 0.65, 0.63, 0.6 , 0.57, 0.53, 0.5] 
-    LAMBDA_TYPE = 'wsr'
+    # # RCP_LAMBDAS = [1.  , 1.  , 0.98, 0.96, 0.89, 0.84, 0.83, 0.79, 0.78, 0.75, 0.74, 0.7 , 0.65, 0.63, 0.6 , 0.57, 0.53, 0.5] 
+    # # LAMBDA_TYPE = 'wsr'
 
-    
+    # # RCP_LAMBDAS = [0.5, 0.52, 0.53, 0.56, 0.57, 0.59, 0.6, 0.63, 0.65, 0.67, 0.7, 0.71, 0.73, 0.74, 0.75]
+    # # LAMBDA_TYPE = 'batch1'
 
-    res_dict = {}
-    for thres in RCP_LAMBDAS:
-        additional_args.exit_conf_threshold = thres
-        _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
-        res_dict[thres] = (res['eval_block_avg'], res['eval_f1'], res['losses'])
-        print(thres, res['eval_block_avg'], res['eval_f1'])
+    # # RCP_LAMBDAS = [0.78, 0.79, 0.81, 0.83, 0.84, 0.86, 0.89, 0.92, 0.95, 0.96, 0.97, 0.98, 0.99, 1.0]
+    # # LAMBDA_TYPE = 'batch2'
+
+    # RCP_LAMBDAS = [0.54, 0.58, 0.61, 0.62, 0.64, 0.68, 0.72, 0.77, 0.8, 0.82, 0.85, 0.88, 0.94]
+    # LAMBDA_TYPE = 'batch3'
+
+
+    # res_dict = {}
+    # for thres in RCP_LAMBDAS:
+    #     additional_args.exit_conf_threshold = thres
+    #     _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+    #     res_dict[thres] = (res['eval_block_avg'], res['eval_f1'], res['losses'])
+    #     print(thres, res['eval_block_avg'], res['eval_f1'])
    
     
-    with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}_test_{LAMBDA_TYPE}.pkl'), 'wb') as f:
-        pickle.dump(res_dict, f)
+    # with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}_test_{LAMBDA_TYPE}.pkl'), 'wb') as f:
+    #     pickle.dump(res_dict, f)
+
+    # ====================================================
+
+    # =================== RCP calibration (sample different calibration datasets) ===================
+
+    N_CAL = 500
+    data_args.max_eval_samples = N_CAL
+    
+    additional_args.rcp_calib = True
+    lambda_step =0.01
+
+    for x in range(20):
+        additional_args.rcp_calib_factor  = x
+
+        res_dict = {}
+        for thres in np.arange(0.5, 1.02, lambda_step):
+            additional_args.exit_conf_threshold = thres
+            _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+            res_dict[thres] = (res['eval_block_avg'], res['eval_f1'], res['losses'])
+            print(thres, res['eval_block_avg'], res['eval_f1'])
+    
+        
+        with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}_{x}.pkl'), 'wb') as f:
+            pickle.dump(res_dict, f)
 
     # ====================================================

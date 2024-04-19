@@ -29,7 +29,7 @@
     # --intermediate_loss_fn weighted_ce \
 
 
-CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.run --nproc_per_node=1 --master_port=29501 \
+CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.run --nproc_per_node=1 --master_port=29500 \
     run_question_answering.py \
     --model_name_or_path ./save/squad_t5_large_weighted_ce/ \
     --do_eval \
