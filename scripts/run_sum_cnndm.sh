@@ -50,7 +50,7 @@ CUDA_VISIBLE_DEVICES=0 python -m torch.distributed.run --nproc_per_node=1 --mast
     --predict_with_generate \
     --source_prefix "summarize: " \
     --use_early_exit True \
-    --exit_conf_type state-saturation \
+    --exit_conf_type softmax \
     --exit_conf_threshold 1.1 \
     --exit_min_layer 4 
 

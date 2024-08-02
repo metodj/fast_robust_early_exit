@@ -510,11 +510,6 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
             model.base_model.save_pretrained(training_args.output_dir)  # save config.json
 
     # Evaluation
-    print(type(trainer))
-    print(type(model))
-
-    print(len(eval_dataset))
-    print(eval_dataset[0])
 
     results = {}
     if training_args.do_eval:
@@ -602,9 +597,9 @@ if __name__ == "__main__":
 
     # main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
 
-    # =================== RCP calibration ===================
+    # =================== RCP calibration (softmax/meta) ===================
 
-    N_CAL = 2000
+    N_CAL = 500
     data_args.max_eval_samples = N_CAL
     additional_args.rcp_calib_factor  = 0
     additional_args.rcp_calib = True
@@ -615,43 +610,35 @@ if __name__ == "__main__":
 
     res_dict = {}
 
-    for thres in np.arange(0.01, 1.01, lambda_step):
+    for thres in np.arange(0.01, 1.1, lambda_step):
         additional_args.exit_conf_threshold = thres
         _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
         res_dict[thres] = (res['eval_block_avg'], res['eval_rougeL'], res['eval_losses'])
         print(thres, res['eval_block_avg'], res['eval_rougeL'], len(eval(res['eval_losses'])))
-        break
-   
-    # with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}.pkl'), 'wb') as f:
-    #     pickle.dump(res_dict, f)
-    # with open(os.path.join(training_args.output_dir, f'res_dict_ncal_all.pkl'), 'wb') as f:
-    #     pickle.dump(res_dict, f)
 
     with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}_decay_thres_{int(TEMP)}_softmax.pkl'), 'wb') as f:
         pickle.dump(res_dict, f)
 
     # ====================================================
 
-    # # =================== RCP calibration (sample different calibration datasets) ===================
+    # =================== RCP calibration (state-saturation) ===================
 
-    # N_CAL = 100
+    # N_CAL = 500
     # data_args.max_eval_samples = N_CAL
-    
+    # additional_args.rcp_calib_factor  = 0
     # additional_args.rcp_calib = True
-    # lambda_step =0.01
+    # lambda_step =0.002
 
-    # for x in range(7, 20):
-    #     additional_args.rcp_calib_factor  = x
+    # TEMP = 4.
+    # additional_args.exit_position_temp = TEMP
 
-    #     res_dict = {}
-    #     for thres in np.arange(0.5, 1.02, lambda_step):
-    #         additional_args.exit_conf_threshold = thres
-    #         _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
-    #         res_dict[thres] = (res['eval_block_avg'], res['eval_rougeL'], res['eval_losses'])
-    #         print(thres, res['eval_block_avg'], res['eval_rougeL'])
-    
-        
-    #     with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}_{x}.pkl'), 'wb') as f:
-    #         pickle.dump(res_dict, f)
+    # res_dict = {}
 
-    # # ====================================================
+    # for thres in np.arange(0.99, 1.1, lambda_step):
+    #     additional_args.exit_conf_threshold = thres
+    #     _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+    #     res_dict[thres] = (res['eval_block_avg'], res['eval_rougeL'], res['eval_losses'])
+    #     print(thres, res['eval_block_avg'], res['eval_rougeL'], len(eval(res['eval_losses'])))
+
+    # with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}_decay_thres_{int(TEMP)}_state.pkl'), 'wb') as f:
+    #     pickle.dump(res_dict, f)
