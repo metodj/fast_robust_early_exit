@@ -425,14 +425,14 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
             
             max_eval_samples = min(len(eval_examples), data_args.max_eval_samples)
             # TODO: implement this better
-            assert max_eval_samples == data_args.max_eval_samples
+            # assert max_eval_samples == data_args.max_eval_samples
             if additional_args.rcp_calib:  # RCP calibration
                 eval_examples = eval_examples.select(range(max_eval_samples * additional_args.rcp_calib_factor, max_eval_samples * (additional_args.rcp_calib_factor + 1)))
             else:  # RCP testing
                 assert additional_args.nr_test_samples is not None
                 upper_bound = min(len(eval_examples), additional_args.nr_test_samples + max_eval_samples) 
                 eval_examples = eval_examples.select(range(max_eval_samples, upper_bound))
-            samples_ids = [x["id"] for x in eval_examples]
+        samples_ids = [x["id"] for x in eval_examples]
         # Validation Feature Creation
         with training_args.main_process_first(desc="validation dataset map pre-processing"):
             eval_dataset = eval_examples.map(
@@ -707,27 +707,38 @@ if __name__ == "__main__":
 
     # ============================================================================================
 
-    # =================== RCP calibration ===================
+    # # =================== RCP calibration ===================
 
-    # N_CAL = 100
+    # N_CAL = 15000
     # data_args.max_eval_samples = N_CAL
-    # additional_args.rcp_calib_factor  = 0
-    # additional_args.rcp_calib = True
-    # lambda_step =0.01
+    additional_args.rcp_calib_factor  = 0
+    additional_args.rcp_calib = True
+    lambda_step =0.01
 
-    # res_dict = {}
-    # for thres in np.arange(0.5, 1.02, lambda_step):
-    #     additional_args.exit_conf_threshold = thres
-    #     _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
-    #     res_dict[thres] = (res['eval_block_avg'], res['eval_f1'], res['losses'])
-    #     print(thres, res['eval_block_avg'], res['eval_f1'])
-    #     break
+    # TEMP = 4.
+    # additional_args.exit_position_temp = TEMP
+
+    res_dict = {}
+    for thres in np.arange(0.01, 1.02, lambda_step):
+        additional_args.exit_conf_threshold = thres
+        _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+        res_dict[thres] = (res['eval_block_avg'], res['eval_f1'], res['losses'], res['samples_ids'])
+        print(thres, res['eval_block_avg'], res['eval_f1'])
    
     
     # with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}.pkl'), 'wb') as f:
     #     pickle.dump(res_dict, f)
+    # with open(os.path.join(training_args.output_dir, f'res_dict_ncal_all.pkl'), 'wb') as f:
+    #     pickle.dump(res_dict, f)
+    # with open(os.path.join(training_args.output_dir, f'res_dict_ncal_all_decay_thres_{int(TEMP)}.pkl'), 'wb') as f:
+    #     pickle.dump(res_dict, f)
+    # with open(os.path.join(training_args.output_dir, f'res_dict_ncal_all_decay_thres_{int(TEMP)}_min_exit_{4}.pkl'), 'wb') as f:
+    #     pickle.dump(res_dict, f)
 
-    # ====================================================
+    with open(os.path.join(training_args.output_dir, f'res_dict_ncal_all_min_exit_{7}.pkl'), 'wb') as f:
+        pickle.dump(res_dict, f)
+
+    # # ====================================================
 
     # =================== RCP testing ===================
 
@@ -770,24 +781,47 @@ if __name__ == "__main__":
 
     # =================== RCP calibration (sample different calibration datasets) ===================
 
-    N_CAL = 500
-    data_args.max_eval_samples = N_CAL
+    # N_CAL = 500
+    # data_args.max_eval_samples = N_CAL
     
-    additional_args.rcp_calib = True
-    lambda_step =0.01
+    # additional_args.rcp_calib = True
+    # lambda_step =0.01
 
-    for x in range(20):
-        additional_args.rcp_calib_factor  = x
+    # for x in range(20):
+    #     additional_args.rcp_calib_factor  = x
 
-        res_dict = {}
-        for thres in np.arange(0.5, 1.02, lambda_step):
-            additional_args.exit_conf_threshold = thres
-            _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
-            res_dict[thres] = (res['eval_block_avg'], res['eval_f1'], res['losses'])
-            print(thres, res['eval_block_avg'], res['eval_f1'])
+    #     res_dict = {}
+    #     for thres in np.arange(0.5, 1.02, lambda_step):
+    #         additional_args.exit_conf_threshold = thres
+    #         _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+    #         res_dict[thres] = (res['eval_block_avg'], res['eval_f1'], res['losses'])
+    #         print(thres, res['eval_block_avg'], res['eval_f1'])
     
         
-        with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}_{x}.pkl'), 'wb') as f:
-            pickle.dump(res_dict, f)
+    #     with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}_{x}.pkl'), 'wb') as f:
+    #         pickle.dump(res_dict, f)
 
     # ====================================================
+
+    # # =================== RCP calibration - decaying threshold ===================
+
+    # N_CAL = 10
+    # data_args.max_eval_samples = N_CAL
+    # additional_args.rcp_calib_factor  = 0
+    # additional_args.rcp_calib = True
+    # lambda_step =0.01
+
+    # additional_args.exit_position_temp = 4
+
+    # res_dict = {}
+    # for thres in np.arange(0.5, 1.02, lambda_step):
+    #     additional_args.exit_conf_threshold = thres
+    #     _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+    #     res_dict[thres] = (res['eval_block_avg'], res['eval_f1'], res['losses'])
+    #     print(thres, res['eval_block_avg'], res['eval_f1'])
+   
+    
+    # with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}_decay_thres.pkl'), 'wb') as f:
+    #     pickle.dump(res_dict, f)
+
+    # # ====================================================

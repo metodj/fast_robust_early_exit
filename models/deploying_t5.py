@@ -817,6 +817,7 @@ class DeployT5Stack(T5Stack):
         self.shallow2deep = False  # False: skip, and True: forward
         self.lm_logits = None  # to prevent calculating logits twice
 
+        hidden_states_all = []
         for i, layer_module in enumerate(self.block):
                 
             # Static framework
@@ -837,6 +838,7 @@ class DeployT5Stack(T5Stack):
                     if self.config.use_synchronize: torch.cuda.synchronize()
                     start = datetime.datetime.now()
                     _hidden_states = self.dropout(self.final_layer_norm(hidden_states))
+                    hidden_states_all.append(_hidden_states)
                     lm_logits = lm_head(_hidden_states) if not self.config.tie_word_embeddings \
                         else lm_head(_hidden_states * (self.config.d_model ** -0.5))
                         
@@ -847,6 +849,7 @@ class DeployT5Stack(T5Stack):
                         config=self.config,
                         adapt_threshold=self.bmm_threshold,
                         return_conf=True,
+                        hidden_state_all=hidden_states_all,
                     )
                     self.stack_conf = self.stack_conf + (conf,)
                     self.stack_pred = self.stack_pred + (lm_logits,)
@@ -909,12 +912,13 @@ class DeployT5Stack(T5Stack):
 
                 # Early-Exit framework
                 elif self.use_early_exit and not skip_mask:
+                    _hidden_states = self.dropout(self.final_layer_norm(hidden_states))
+                    hidden_states_all.append(_hidden_states)
                     if self.exit_min_layer is not None and i < self.exit_min_layer: 
                         self.block_op[i] += 1
                     else:
                         if self.config.use_synchronize: torch.cuda.synchronize()
                         start = datetime.datetime.now()
-                        _hidden_states = self.dropout(self.final_layer_norm(hidden_states))
                         lm_logits = lm_head(_hidden_states) if not self.config.tie_word_embeddings \
                             else lm_head(_hidden_states * (self.config.d_model ** -0.5))
                             
@@ -923,7 +927,8 @@ class DeployT5Stack(T5Stack):
                             _hidden_states,
                             cm_head,
                             config=self.config,
-                            pos_time=past_key_values[i][0].shape[2] + 1 if past_key_values[i] is not None else 1
+                            pos_time=past_key_values[i][0].shape[2] + 1 if past_key_values[i] is not None else 1,
+                            hidden_state_all=hidden_states_all,
                         )
                         if not skip_mask: self.block_op[i] += 1                    
                         if skip_mask: self.lm_logits = lm_logits

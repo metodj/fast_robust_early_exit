@@ -28,6 +28,7 @@ import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 import torch
 from filelock import FileLock
+import pickle
 
 import datasets
 import evaluate
@@ -372,8 +373,10 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
         max_target_length = data_args.val_max_target_length
         eval_dataset = raw_datasets["validation"]
         if data_args.max_eval_samples is not None:
-            max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
-            eval_dataset = eval_dataset.select(range(max_eval_samples))
+            # TODO: add support for additional_args.rcp_calib_factor = False
+            assert data_args.max_eval_samples <= len(eval_dataset), "max_eval_samples is larger than the dataset"
+            max_eval_samples = data_args.max_eval_samples
+            eval_dataset = eval_dataset.select(range(max_eval_samples * additional_args.rcp_calib_factor, max_eval_samples * (additional_args.rcp_calib_factor + 1)))
         with training_args.main_process_first(desc="validation dataset map pre-processing"):
             eval_dataset = eval_dataset.map(
                 preprocess_function,
@@ -383,6 +386,8 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
                 load_from_cache_file=not data_args.overwrite_cache,
                 desc="Running tokenizer on validation dataset",
             )
+        
+        # samples_ids = [x["input_ids"] for x in eval_dataset]
 
     if training_args.do_predict:
         max_target_length = data_args.val_max_target_length
@@ -507,12 +512,17 @@ def main(model_args, data_args, training_args, additional_args, model_cls, train
     # Evaluation
     print(type(trainer))
     print(type(model))
+
+    print(len(eval_dataset))
+    print(eval_dataset[0])
+
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate(metric_key_prefix="eval")
         max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
         metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
+        # metrics["samples_ids"] = str(samples_ids)
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
@@ -594,21 +604,54 @@ if __name__ == "__main__":
 
     # =================== RCP calibration ===================
 
-    N_CAL = 100
+    N_CAL = 2000
     data_args.max_eval_samples = N_CAL
     additional_args.rcp_calib_factor  = 0
     additional_args.rcp_calib = True
     lambda_step =0.01
 
+    TEMP = 4.
+    additional_args.exit_position_temp = TEMP
+
     res_dict = {}
+
     for thres in np.arange(0.01, 1.01, lambda_step):
         additional_args.exit_conf_threshold = thres
         _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
         res_dict[thres] = (res['eval_block_avg'], res['eval_rougeL'], res['eval_losses'])
         print(thres, res['eval_block_avg'], res['eval_rougeL'], len(eval(res['eval_losses'])))
+        break
    
-    
-    with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}.pkl'), 'wb') as f:
+    # with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}.pkl'), 'wb') as f:
+    #     pickle.dump(res_dict, f)
+    # with open(os.path.join(training_args.output_dir, f'res_dict_ncal_all.pkl'), 'wb') as f:
+    #     pickle.dump(res_dict, f)
+
+    with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}_decay_thres_{int(TEMP)}_softmax.pkl'), 'wb') as f:
         pickle.dump(res_dict, f)
 
     # ====================================================
+
+    # # =================== RCP calibration (sample different calibration datasets) ===================
+
+    # N_CAL = 100
+    # data_args.max_eval_samples = N_CAL
+    
+    # additional_args.rcp_calib = True
+    # lambda_step =0.01
+
+    # for x in range(7, 20):
+    #     additional_args.rcp_calib_factor  = x
+
+    #     res_dict = {}
+    #     for thres in np.arange(0.5, 1.02, lambda_step):
+    #         additional_args.exit_conf_threshold = thres
+    #         _, res = main(model_args, data_args, training_args, additional_args, model_cls, trainer_cls)
+    #         res_dict[thres] = (res['eval_block_avg'], res['eval_rougeL'], res['eval_losses'])
+    #         print(thres, res['eval_block_avg'], res['eval_rougeL'])
+    
+        
+    #     with open(os.path.join(training_args.output_dir, f'res_dict_ncal{N_CAL}_{x}.pkl'), 'wb') as f:
+    #         pickle.dump(res_dict, f)
+
+    # # ====================================================
